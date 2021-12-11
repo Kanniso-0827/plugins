@@ -263,7 +263,7 @@ class moderation(commands.Cog):
                 )
                 await ctx.send(embed = embed)
             else:
-                if member.guild_permissions.administrator:
+                if member.guild_permissions.ban_members:
                     embed = discord.Embed(
                         description = f"{self.cross} **That user is a Admin, I can't ban them!**",
                         color = self.errorcolor
