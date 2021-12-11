@@ -265,7 +265,7 @@ class moderation(commands.Cog):
             else:
                 if member.guild_permissions.ban_members:
                     embed = discord.Embed(
-                        description = f"{self.cross} **That user is a Admin, I can't ban them!**",
+                        description = f"{self.cross} **That user is a moderator, I can't ban them!**",
                         color = self.errorcolor
                     )
                     await ctx.send(embed = embed)
@@ -606,19 +606,30 @@ class moderation(commands.Cog):
             await ctx.send(embed = embed)
 
     #warn command        
-   @commands.command()
+    @commands.command()
     @checks.has_permissions(PermissionLevel.MODERATOR)
-    async def warn(self, ctx, member: discord.Member, *, reason: str):
+    async def warn(self, ctx, member : discord.Member = None, *, reason: str):
         """Warn a member.
         Usage:
-        {prefix}warn @member Spoilers
+        {ctx.prefix}warn @member Spoilers
         """
+        if member == None:
+            embed = discord.Embed(
+                title=f"{self.cross} Invalid Usage!",
+                description = f"**Usage: **{ctx.prefix}warn <member> <reason>\n**Example: **{ctx.prefix}warn @member doing spam!",
+                color = self.errorcolor
+            )
+            embed.set_footer(text="<> - Required")
+            return await ctx.send(embed = embed)
 
         if member.bot:
-            return await ctx.send("Bots can't be warned.")
+            embed = discord.Embed(
+                description = f"**{self.cross} Bots can't be warned.**",
+                color = self.errorcolor
+            )
+            return await ctx.send(embed=embed)
 
         channel_config = await self.db.find_one({"_id": "config"})
-
         if channel_config is None:
             return await ctx.send("There's no configured log channel.")
         else:
@@ -648,7 +659,27 @@ class moderation(commands.Cog):
             {"_id": "warns"}, {"$set": {str(member.id): userw}}, upsert=True
         )
 
-        await ctx.send(f"Successfully warned **{member}**\n`{reason}`")
+        embed = discord.Embed(
+            description = f"{self.tick} ***{member} has been warned.***\n**|| {reason}**",
+            color = self.green
+        )
+        await ctx.send(embed = embed)
+        msgembed = discord.Embed(
+            description = f"**You have been warned in `{ctx.guild.name}`\n|| {reason}**",
+            color = self.blue
+        )
+                        
+        try:
+            await member.send(embed=msgembed)
+        except discord.errors.Forbidden:
+            embedlog2 = discord.Embed(color = self.blue)
+            embedlog2.set_author(name=f"Warn | {member}", icon_url=member.avatar_url)
+            embedlog2.add_field(name="User Warn :", value=f"{member.mention}", inline=True)
+            embedlog2.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=False)
+            embedlog2.add_field(name="Total Warnings :", value=warning, inline = False)
+            embedlog2.add_field(name="Reason :", value=reason, inline=False)
+            embedlog2.add_field(name="Status :", value="I could not DM them.", inline=False)
+            return await channel.send(embed = embedlog2)
 
         await channel.send(
             embed=await self.generateWarnEmbed(
@@ -658,19 +689,31 @@ class moderation(commands.Cog):
         del userw
         return
 
+
     @commands.command()
-    @checks.has_permissions(PermissionLevel.MODERATOR)
-    async def pardon(self, ctx, member: discord.Member, *, reason: str):
+    @checks.has_permissions(PermissionLevel.ADMINISTRATOR)
+    async def pardon(self, ctx, member: discord.Member = None, *, reason: str):
         """Remove all warnings of a  member.
         Usage:
-        {prefix}pardon @member Nice guy
+        {ctx.prefix}pardon @member Nice guy
         """
+        if member == None:
+            embed = discord.Embed(
+                title=f"{self.cross} Invalid Usage!",
+                description = f"**Usage: **{ctx.prefix}pardon <member> <reason>\n**Example: **{ctx.prefix}pardon @member doing spam!",
+                color = self.errorcolor
+            )
+            embed.set_footer(text="<> - Required")
+            return await ctx.send(embed = embed)
 
         if member.bot:
-            return await ctx.send("Bots can't be warned, so they can't be pardoned.")
+            embed = discord.Embed(
+                description = f"**{self.cross} Bots can't be warned, so they can't be pardoned.**",
+                color = self.errorcolor
+            )
+            return await ctx.send(embed=embed)
 
         channel_config = await self.db.find_one({"_id": "config"})
-
         if channel_config is None:
             return await ctx.send("There's no configured log channel.")
         else:
@@ -687,30 +730,43 @@ class moderation(commands.Cog):
         try:
             userwarns = config[str(member.id)]
         except KeyError:
-            return await ctx.send(f"{member} doesn't have any warnings.")
+            embed = discord.Embed(
+                description = f"**{self.cross} {member} doesn't have any warnings.**",
+                color = self.errorcolor
+            )
+            return await ctx.send(embed = embed)
 
         if userwarns is None:
-            await ctx.send(f"{member} doesn't have any warnings.")
+            embedtwo = discord.Embed(
+                description = f"**{self.cross} {member} doesn't have any warnings.**",
+                color = self.errorcolor
+            )
+            await ctx.send(embed = embedtwo)
 
         await self.db.find_one_and_update(
             {"_id": "warns"}, {"$set": {str(member.id): []}}
         )
 
-        await ctx.send(f"Successfully pardoned **{member}**\n`{reason}`")
+        embedfinal = discord.Embed(
+                description = f"{self.tick} ***{member} has been pardoned.***\n**|| {reason}**",
+                color = self.green
+            )
+        await ctx.send(embed = embedfinal)
+        
 
-        embed = discord.Embed(color=discord.Color.blue())
-
+        embed = discord.Embed(color = self.blue)
         embed.set_author(
             name=f"Pardon | {member}",
             icon_url=member.avatar_url,
         )
-        embed.add_field(name="User", value=f"{member}")
+        embed.add_field(name="User :", value=f"{member}", inline = True)
         embed.add_field(
-            name="Moderator",
-            value=f"<@{ctx.author.id}> - `{ctx.author}`",
+            name="Moderator :",
+            value=f"<@{ctx.author.id}>",
+            inline = True,
         )
-        embed.add_field(name="Reason", value=reason)
-        embed.add_field(name="Total Warnings", value="0")
+        embed.add_field(name="Total Warnings :", value="0", inline = True)
+        embed.add_field(name="Reason :", value=reason, inline = False)
 
         return await channel.send(embed=embed)
 
@@ -718,16 +774,16 @@ class moderation(commands.Cog):
         member: discord.User = await self.bot.fetch_user(int(memberid))
         mod: discord.User = await self.bot.fetch_user(int(modid))
 
-        embed = discord.Embed(color=discord.Color.red())
+        embed = discord.Embed(color = self.yell)
 
         embed.set_author(
             name=f"Warn | {member}",
             icon_url=member.avatar_url,
         )
-        embed.add_field(name="User", value=f"{member}")
-        embed.add_field(name="Moderator", value=f"<@{modid}>` - ({mod})`")
-        embed.add_field(name="Reason", value=reason)
-        embed.add_field(name="Total Warnings", value=warning)
+        embed.add_field(name="User Warn :", value=f"{member}", inline = True)
+        embed.add_field(name="Moderator :", value=f"<@{modid}>", inline = True)
+        embed.add_field(name="Total Warnings :", value=warning, inline = False)
+        embed.add_field(name="Reason :", value=reason, inline = False)
         return embed
 
     #SLOW MODE COMMAND
