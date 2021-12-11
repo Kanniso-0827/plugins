@@ -142,9 +142,9 @@ class moderation(commands.Cog):
                 )
                 await ctx.send(embed = embed)
             else:
-                if member.guild_permissions.administrator:
+                if member.guild_permissions.kick_members:
                     embed = discord.Embed(
-                        description = f"{self.cross} **That user is an Admin, I can't kick them!**",
+                        description = f"{self.cross} **That user is a moderator, I can't kick them!**",
                         color = self.errorcolor
                     )
                     await ctx.send(embed = embed)
