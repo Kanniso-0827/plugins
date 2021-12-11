@@ -435,7 +435,7 @@ class moderation(commands.Cog):
                 await ctx.send(embed = embed, delete_after = 5.0)
             else:
                 if reason == None:
-                    role = discord.utils.get(ctx.guild.roles, name = "Muted")
+                    role = discord.utils.get(ctx.guild.roles, name = "Dark Cloud")
                     if role == None:
                         role = await ctx.guild.create_role(name = "Muted")
                         for channel in ctx.guild.text_channels:
