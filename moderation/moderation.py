@@ -5,6 +5,16 @@ from core.models import PermissionLevel
 import re
 import asyncio
 
+import inspect
+import sys
+import time
+
+import discord
+from helpers.embed_builder import EmbedBuilder
+from helpers.misc_functions import (author_is_mod, is_integer,
+                                    is_valid_duration, parse_duration)
+
+from commands.base import Command
     
 class moderation(commands.Cog):
     """
