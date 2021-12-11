@@ -227,7 +227,7 @@ class moderation(commands.Cog):
     async def kick_error(self, ctx, error):
         if isinstance(error, commands.MissingPermissions):
             embed = discord.Embed(
-                title = "Missing Permissions !",
+                title = "Missing Permissions!",
                 description = f"{self.cross} You are missing permissions to kick members!",
                 color = self.errorcolor
             )
