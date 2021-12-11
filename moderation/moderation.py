@@ -550,7 +550,7 @@ class moderation(commands.Cog):
             embed.set_footer(text="<> - Required | [] - optional")
             await ctx.send(embed = embed)
         else:
-            role = discord.utils.get(ctx.guild.roles, name = "Muted")
+            role = discord.utils.get(ctx.guild.roles, name = "Dark Cloud")
             if role in member.roles:
                 await member.remove_roles(role)
                 embed = discord.Embed(
