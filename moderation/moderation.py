@@ -404,206 +404,182 @@ class moderation(commands.Cog):
             )
             await ctx.send(embed = embed, delete_after = 5.0)
 
-    #Mute command
-    @commands.command()
-    @checks.has_permissions(PermissionLevel.MODERATOR)
-    async def mute(self, ctx, member : discord.Member = None, *, reason = None):
-        """
-        Mutes the specified member.
-        """
-        channel_config = await self.db.find_one({"_id": "config"})
-        if channel_config is None:
-            return await ctx.send("There's no configured log channel.")
-        else:
-            channel = ctx.guild.get_channel(int(channel_config["channel"]))
+class UnMuteCommand(Command):
+    def __init__(self, client_instance):
+        self.cmd = "unmute"
+        self.client = client_instance
+        self.storage = client_instance.storage
+        self.usage = f"Usage: {self.client.prefix}unmute <user id>"
+        self.invalid_user = "There is no user with the userID: {user_id}. {usage}"
+        self.not_enough_arguments = "You must provide a user to unmute. {usage}"
+        self.not_a_user_id = "{user_id} is not a valid user ID. {usage}"
 
-
-        if member == None:
-            embed = discord.Embed(
-                title=f"{self.cross} Invalid Usage!",
-                description = f"**Usage: **{ctx.prefix}mute <member> [reason]\n**Example: **{ctx.prefix}mute @member\n**Example: **{ctx.prefix}mute @member doing spam!",
-                color = self.errorcolor
-            )
-            embed.set_footer(text="<> - Required | [] - optional")
-            await ctx.send(embed = embed)
-        else:
-            if member.id == ctx.message.author.id:
-                embed = discord.Embed(
-                    description = f"{self.cross} **You can't mute yourself!**",
-                    color = self.errorcolor
-                )
-                await ctx.send(embed = embed, delete_after = 5.0)
-            else:
-                if reason == None:
-                    role = discord.utils.get(ctx.guild.roles, name = "Dark Cloud")
-                    if role == None:
-                        role = await ctx.guild.create_role(name = "Muted")
-                        for channel in ctx.guild.text_channels:
-                            await channel.set_permissions(role, send_messages = False)
-                    await member.add_roles(role)
-                    embed = discord.Embed(
-                        description = f"{self.tick} ***{member} has been muted !***",
-                        color = self.green
-                    )
-                    await ctx.send(embed = embed)
-                    msgembed = discord.Embed(
-                        description = f"**You have been muted in `{ctx.guild.name}`**",
-                        color = self.blue
-                    )
-                        
+    async def execute(self, message, **kwargs):
+        command = kwargs.get("args")
+        if await author_is_mod(message.author, self.storage):
+            if len(command) == 1:
+                if is_integer(command[0]):
+                    guild_id = str(message.guild.id)
+                    user_id = int(command[0])
+                    muted_role_id = int(self.storage.settings["guilds"][guild_id]["muted_role_id"])
                     try:
-                        await member.send(embed=msgembed)
-                    except discord.errors.Forbidden:
-                        embedlog2 = discord.Embed(color = self.blue)
-                        embedlog2.set_author(name=f"Mute 🔇 | {member}", icon_url=member.avatar_url)
-                        embedlog2.add_field(name="User Muted :", value=f"{member.mention}", inline=True)
-                        embedlog2.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                        embedlog2.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                        embedlog2.add_field(name="Reason :", value="No reason provided!", inline=False)
-                        embedlog2.add_field(name="Status :", value="I could not DM them.", inline=False)
-                        return await channel.send(embed = embedlog2)
-
-                    embed = discord.Embed(
-                        color = self.green
-                    )
-                    embed.set_author(
-                        name=f"Mute 🔇 | {member}",
-                        icon_url=member.avatar_url,
-                    )
-                    embed.add_field(name="User Muted :", value=f"{member.mention}", inline=True)
-                    embed.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                    embed.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                    embed.add_field(name="Reason :", value="No reason provided!", inline=False)
-                    await channel.send(embed = embed)
-
+                        user = await message.guild.fetch_member(user_id)
+                    except discord.errors.NotFound or discord.errors.HTTPException:
+                        user = None
+                    muted_role = message.guild.get_role(muted_role_id)
+                    if user is not None:
+                        # Remove the muted role from the user and remove them from the guilds muted users list
+                        await user.remove_roles(muted_role, reason=f"Unmuted by {message.author.name}")
+                        self.storage.settings["guilds"][guild_id]["muted_users"].pop(str(user_id))
+                        await self.storage.write_file_to_disk()
+                        # Message the channel
+                        await message.channel.send(f"**Unmuted user:** `{user.name}`**.**")
+                        
+                        # Build the embed and message it to the log channel
+                        embed_builder = EmbedBuilder(event="unmute")
+                        await embed_builder.add_field(name="**Executor**", value=f"`{message.author.name}`")
+                        await embed_builder.add_field(name="**Unmuted user**", value=f"`{user.name}`")
+                        embed = await embed_builder.get_embed()
+                        log_channel_id = int(self.storage.settings["guilds"][guild_id]["log_channel_id"])
+                        log_channel = message.guild.get_channel(log_channel_id)
+                        if log_channel is not None:
+                            await log_channel.send(embed=embed)
+                    else:
+                        await message.channel.send(self.invalid_user.format(user_id=user_id, usage=self.usage))
                 else:
-                    role = discord.utils.get(ctx.guild.roles, name = "Muted")
-                    if role == None:
-                        role = await ctx.guild.create_role(name = "Muted")
-                        for channel in ctx.guild.text_channels:
-                            await channel.set_permissions(role, send_messages = False)
-                    await member.add_roles(role)
-                    embed = discord.Embed(
-                        description = f"***{self.tick} {member} has been muted !*** \n**|| {reason}**",
-                        color = self.green
-                    )
-                    await ctx.send(embed = embed)
-                    msgembed = discord.Embed(
-                        description = f"**You have been muted in `{ctx.guild.name}`\n|| {reason}**",
-                        color = self.blue
-                    )
-                        
-                    try:
-                        await member.send(embed=msgembed)
-                    except discord.errors.Forbidden:
-                        embedlog2 = discord.Embed(color = self.blue)
-                        embedlog2.set_author(name=f"Mute 🔇 | {member}", icon_url=member.avatar_url)
-                        embedlog2.add_field(name="User Muted :", value=f"{member.mention}", inline=True)
-                        embedlog2.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                        embedlog2.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                        embedlog2.add_field(name="Reason :", value=f"{reason}", inline=False)
-                        embedlog2.add_field(name="Status :", value="I could not DM them.", inline=False)
-                        return await channel.send(embed = embedlog2)
-
-                    embed = discord.Embed(
-                        color = self.green
-                    )
-                    embed.set_author(
-                        name=f"Mute 🔇 | {member}",
-                        icon_url=member.avatar_url,
-                    )
-                    embed.add_field(name="User Muted :", value=f"{member.mention}", inline=True)
-                    embed.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                    embed.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                    embed.add_field(name="Reason :", value=f"{reason}", inline=False)
-                    await channel.send(embed = embed)
-
-    @mute.error
-    async def mute_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            embed = discord.Embed(
-                title = "Missing Permissions!",
-                description = "{self.cross} **You are missing permission to mute people!**",
-                color = self.errorcolor
-            )
-            await ctx.send(embed = embed)
-
-    #Unmute command
-    @commands.command()
-    @checks.has_permissions(PermissionLevel.MODERATOR)
-    async def unmute(self, ctx, member : discord.Member = None):
-        """
-        Unmutes the specified member.
-        """
-        channel_config = await self.db.find_one({"_id": "config"})
-        if channel_config is None:
-            return await ctx.send("There's no configured log channel.")
-        else:
-            channel = ctx.guild.get_channel(int(channel_config["channel"]))
-
-        if member == None:
-            embed = discord.Embed(
-                title=f"{self.cross} Invalid Usage!",
-                description = f"**Usage: **{ctx.prefix}unmute <member> [reason]\n**Example: **{ctx.prefix}unmute @member\n**Example: **{ctx.prefix}unmute @member doing spam!",
-                color = self.errorcolor
-            )
-            embed.set_footer(text="<> - Required | [] - optional")
-            await ctx.send(embed = embed)
-        else:
-            role = discord.utils.get(ctx.guild.roles, name = "Dark Cloud")
-            if role in member.roles:
-                await member.remove_roles(role)
-                embed = discord.Embed(
-                    description = f"***{self.tick} {member} has been unmuted!***",
-                    color = self.green
-                )
-                await ctx.send(embed = embed)
-                msgembed = discord.Embed(
-                    description = f"**You have been unmuted in `{ctx.guild.name}`**",
-                    color = self.blue
-                )
-                        
-                try:
-                    await member.send(embed=msgembed)
-                except discord.errors.Forbidden:
-                    embedlog2 = discord.Embed(color = self.blue)
-                    embedlog2.set_author(name=f"Unmute 🔉 | {member}", icon_url=member.avatar_url)
-                    embedlog2.add_field(name="User UnMuted :", value=f"{member.mention}", inline=True)
-                    embedlog2.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                    embedlog2.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                    embedlog2.add_field(name="Reason :", value="No reason provided!", inline=False)
-                    embedlog2.add_field(name="Status :", value="I could not DM them.", inline=False)
-                    return await channel.send(embed = embedlog2)
-
-                embed = discord.Embed(
-                    color = self.blue
-                )
-                embed.set_author(
-                    name=f"Unmute 🔉 | {member}",
-                    icon_url=member.avatar_url,
-                )
-                embed.add_field(name="User UnMuted :", value=f"{member.mention}", inline=True)
-                embed.add_field(name="Moderator :", value=f"{ctx.message.author.mention}", inline=True)
-                embed.add_field(name="Channel :", value=f"{ctx.message.channel.mention}", inline=True)
-                embed.add_field(name="Reason :", value="No reason provided!", inline=False)
-                await channel.send(embed = embed)
+                    await message.channel.send(self.not_a_user_id.format(user_id=command[0], usage=self.usage))
             else:
-                embed = discord.Embed(
-                    title = "Unmute Error!",
-                    description = f"**{self.cross} {member.mention} is not muted!**",
-                    color = self.errorcolor
-                )
-                await ctx.send(embed = embed)
+                await message.channel.send(self.not_enough_arguments.format(usage=self.usage))
+        else:
+            await message.channel.send("**You must be a moderator to use this command.**")
 
-    @unmute.error
-    async def unmute_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            embed = discord.Embed(
-                title = "Missing Permissions!",
-                description = f"{self.cross} **You are missing permission to unmute people!**",
-                color = self.errorcolor
-            )
-            await ctx.send(embed = embed)
+
+class MuteCommand(Command):
+    def __init__(self, client_instance):
+        self.cmd = "mute"
+        self.client = client_instance
+        self.storage = client_instance.storage
+        self.usage = f"Usage: {self.client.prefix}mute <user id> [reason]"
+        self.invalid_user = "There is no user with the userID: {user_id}. {usage}"
+        self.not_enough_arguments = "You must provide a user to mute. {usage}"
+        self.not_a_user_id = "{user_id} is not a valid user ID. {usage}"
+
+    async def execute(self, message, **kwargs):
+        command = kwargs.get("args")
+        if await author_is_mod(message.author, self.storage):
+            if len(command) >= 1:
+                if is_integer(command[0]):
+                    guild_id = str(message.guild.id)
+                    user_id = int(command[0])
+                    muted_role_id = int(self.storage.settings["guilds"][guild_id]["muted_role_id"])
+                    try:
+                        user = await message.guild.fetch_member(user_id)
+                    except discord.errors.NotFound or discord.errors.HTTPException:
+                        user = None
+                    muted_role = message.guild.get_role(muted_role_id)
+                    if len(command) >= 2:
+                        # Collects everything after the first item in the command and uses it as a reason.
+                        temp = [item for item in command if command.index(item) > 0]
+                        reason = " ".join(temp)
+                    else:
+                        reason = f"Muted by {message.author.name}"
+                    if user is not None:
+                        # Add the muted role and store them in guilds muted users list. We use -1 as the duration to state that it lasts forever.
+                        await user.add_roles(muted_role, reason=f"Muted by {message.author.name}")
+                        self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)] = {}
+                        self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["duration"] = -1
+                        self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["reason"] = reason
+                        self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["normal_duration"] = -1
+                        await self.storage.write_file_to_disk()
+                        # Message the channel
+                        await message.channel.send(f"**Permanently muted user:** `{user.name}`**. Reason:** `{reason}`")
+                        
+                        # Build the embed and message it to the log channel
+                        embed_builder = EmbedBuilder(event="mute")
+                        await embed_builder.add_field(name="**Executor**", value=f"`{message.author.name}`")
+                        await embed_builder.add_field(name="**Muted user**", value=f"`{user.name}`")
+                        await embed_builder.add_field(name="**Reason**", value=f"`{reason}`")
+                        embed = await embed_builder.get_embed()
+                        log_channel_id = int(self.storage.settings["guilds"][guild_id]["log_channel_id"])
+                        log_channel = message.guild.get_channel(log_channel_id)
+                        if log_channel is not None:
+                            await log_channel.send(embed=embed)
+                        
+                    else:
+                        await message.channel.send(self.invalid_user.format(user_id=user_id, usage=self.usage))
+                else:
+                    await message.channel.send(self.not_a_user_id.format(user_id=command[0], usage=self.usage))
+            else:
+                await message.channel.send(self.not_enough_arguments.format(usage=self.usage))
+        else:
+            await message.channel.send("**You must be a moderator to use this command.**")
+    
+    
+class TempMuteCommand(Command):
+    def __init__(self, client_instance):
+        self.cmd = "tempmute"
+        self.client = client_instance
+        self.storage = client_instance.storage
+        self.usage = f"Usage: {self.client.prefix}tempmute <user id> <duration> [reason]"
+        self.invalid_user = "There is no user with the userID: {user_id}. {usage}"
+        self.invalid_duration = "The duration provided is invalid. The duration must be a string that looks like: 1w3d5h30m20s or a positive number in seconds. {usage}"
+        self.not_enough_arguments = "You must provide a user to temp mute. {usage}"
+        self.not_a_user_id = "{user_id} is not a valid user ID. {usage}"
+
+    async def execute(self, message, **kwargs):
+        command = kwargs.get("args")
+        if await author_is_mod(message.author, self.storage):
+            if len(command) >= 2:
+                if is_integer(command[0]):
+                    user_id = int(command[0])
+                    duration = parse_duration(command[1])
+                    if is_valid_duration(duration):
+                        guild_id = str(message.guild.id)
+                        mute_duration = int(time.time()) + duration
+                        muted_role_id = int(self.storage.settings["guilds"][guild_id]["muted_role_id"])
+                        try:
+                            user = await message.guild.fetch_member(user_id)
+                        except discord.errors.NotFound or discord.errors.HTTPException:
+                            user = None
+                        muted_role = message.guild.get_role(muted_role_id)
+                        if len(command) >= 3:
+                            # Collects everything after the first two items in the command and uses it as a reason.
+                            temp = [item for item in command if command.index(item) > 1]
+                            reason = " ".join(temp)
+                        else:
+                            reason = f"Temp muted by {message.author.name}"
+                        if user is not None:
+                            # Add the muted role and store them in guilds muted users list. We use -1 as the duration to state that it lasts forever.
+                            await user.add_roles(muted_role, reason=f"Muted by {message.author.name}")
+                            self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)] = {}
+                            self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["duration"] = mute_duration
+                            self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["reason"] = reason
+                            self.storage.settings["guilds"][guild_id]["muted_users"][str(user_id)]["normal_duration"] = command[1]
+                            await self.storage.write_file_to_disk()
+                            # Message the channel
+                            await message.channel.send(f"**Temporarily muted user:** `{user.name}` **for:** `{command[1]}`**. Reason:** `{reason}`")
+                            
+                            # Build the embed and message it to the log channel
+                            embed_builder = EmbedBuilder(event="tempmute")
+                            await embed_builder.add_field(name="**Executor**", value=f"`{message.author.name}`")
+                            await embed_builder.add_field(name="**Muted user**", value=f"`{user.name}`")
+                            await embed_builder.add_field(name="**Reason**", value=f"`{reason}`")
+                            await embed_builder.add_field(name="**Duration**", value=f"`{command[1]}`")
+                            embed = await embed_builder.get_embed()
+                            log_channel_id = int(self.storage.settings["guilds"][guild_id]["log_channel_id"])
+                            log_channel = message.guild.get_channel(log_channel_id)
+                            if log_channel is not None:
+                                await log_channel.send(embed=embed)
+                        else:
+                            await message.channel.send(self.invalid_user.format(user_id=user_id, usage=self.usage))
+                    else:
+                        await message.channel.send(self.invalid_duration.format(user_id=user_id, usage=self.usage))
+                else:
+                    await message.channel.send(self.not_a_user_id.format(user_id=command[0], usage=self.usage))
+            else:
+                await message.channel.send(self.not_enough_arguments.format(usage=self.usage))
+        else:
+            await message.channel.send("**You must be a moderator to use this command.**")
 
     #warn command        
     @commands.command()
