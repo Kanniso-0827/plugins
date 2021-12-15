@@ -25,9 +25,9 @@ class moderation(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
         guild = channel.guild
-        role = discord.utils.get(guild.roles, name = "Muted")
+        role = discord.utils.get(guild.roles, name = "Dark Cloud")
         if role == None:
-            role = await guild.create_role(name = "Muted")
+            role = await guild.create_role(name = "Dark Cloud")
         await channel.set_permissions(role, send_messages = False)
    
     #log channel
